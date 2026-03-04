@@ -1,9 +1,9 @@
 [app]
 
-# App title â€” shown on home screen
+# App title — shown on home screen
 title = King App
 
-# Package name â€” must be unique (use your domain reversed)
+# Package name — must be unique (use your domain reversed)
 package.name = kingapp
 
 # Package domain
@@ -18,7 +18,7 @@ source.include_exts = py,png,jpg,kv,atlas,json,txt
 # App version
 version = 1.0
 
-# Requirements â€” jnius is required for Android TrafficStats & SystemClock
+# Requirements — jnius is required for Android TrafficStats & SystemClock
 requirements = python3,kivy==2.3.0,psutil,plyer,pyjnius
 
 # App orientation
