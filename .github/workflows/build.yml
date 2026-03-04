@@ -6,15 +6,17 @@ name: Build Android APK
   workflow_dispatch:
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        
       - name: Build APK
-        uses: ArtemSBulgakov/buildozer-action@v1
+        uses: digreatbrian/buildozer-action@v2
         with:
-          command: buildozer android debug
-          buildozer_version: stable
+          python-version: 3.10
+          buildozer-cmd: buildozer android debug
+          
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
