@@ -1,9 +1,9 @@
 [app]
 
-# App title — shown on home screen
+# App title â€” shown on home screen
 title = King App
 
-# Package name — must be unique (use your domain reversed)
+# Package name â€” must be unique (use your domain reversed)
 package.name = kingapp
 
 # Package domain
@@ -18,8 +18,8 @@ source.include_exts = py,png,jpg,kv,atlas,json,txt
 # App version
 version = 1.0
 
-# Requirements — add any extra Python libs here
-requirements = python3,kivy==2.3.0,psutil,plyer
+# Requirements â€” jnius is required for Android TrafficStats & SystemClock
+requirements = python3,kivy==2.3.0,psutil,plyer,pyjnius
 
 # App orientation
 orientation = portrait
@@ -42,9 +42,6 @@ android.build_tools_version = 33.0.0
 # Accept Android SDK licenses automatically
 android.accept_sdk_license = True
 
-# Entry point
-entrypoint = main.py
-
 # App icon (place a 512x512 PNG named icon.png in your project root)
 # icon.filename = %(source.dir)s/assets/icon.png
 
@@ -53,9 +50,6 @@ entrypoint = main.py
 
 # Presplash background color
 android.presplash_color = #1a1a2e
-
-# Debug or release
-# android.release_artifact = aab
 
 [buildozer]
 
