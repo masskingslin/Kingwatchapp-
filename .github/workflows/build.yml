@@ -1,4 +1,4 @@
-name:BuildAndroidAPK
+name: BuildAndroidAPK
 "on":
   push:
     branches:
