@@ -14,7 +14,7 @@ jobs:
       - name: Build APK
         uses: digreatbrian/buildozer-action@v2
         with:
-          python-version: 3.10
+          python-version: '3.10'
           buildozer-cmd: buildozer android debug
           
       - name: Upload APK
