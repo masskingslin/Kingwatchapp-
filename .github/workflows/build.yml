@@ -1,152 +1,39 @@
 name: Build Android APK
-
 on:
   push:
     branches:
       - main
-    tags:
-      - "v*.*.*"
   workflow_dispatch:
-
 permissions:
   contents: write
-
 jobs:
   build:
     runs-on: ubuntu-22.04
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-
-      - name: Set up Java (required for Android SDK)
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-
-      - name: Install system dependencies
+      - name: Install deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y \
-            build-essential \
-            git \
-            zip \
-            unzip \
-            libffi-dev \
-            libssl-dev \
-            libncurses5-dev \
-            zlib1g-dev \
-            autoconf \
-            automake \
-            libtool \
-            pkg-config \
-            cmake \
-            libltdl-dev \
-            python3-dev
-
-      # FIX: pin Cython to 0.29.37 â€” Cython 3.x breaks pyjnius compile
-      - name: Install Buildozer and Cython
-        run: |
-          pip install --upgrade pip
-          pip install "cython==0.29.37" buildozer virtualenv
-
-      - name: Cache Buildozer global directory
-        uses: actions/cache@v4
-        with:
-          path: ~/.buildozer
-          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            buildozer-${{ runner.os }}-
-
-      - name: Cache .buildozer local directory
-        uses: actions/cache@v4
-        with:
-          path: .buildozer
-          key: buildozer-local-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            buildozer-local-${{ runner.os }}-
-
+          sudo apt-get install -y build-essential git zip unzip libffi-dev libssl-dev libncurses5-dev zlib1g-dev autoconf automake libtool pkg-config cmake libltdl-dev python3-dev
+      - name: Install buildozer
+        run: pip install "cython==0.29.37" buildozer virtualenv
       - name: Build APK
-        run: |
-          set -o pipefail
-          buildozer android debug 2>&1 | tee build.log
-          echo "âœ… Buildozer finished"
-
-      - name: Find and collect APK
-        id: apk
-        run: |
-          echo "=== Searching for APK ==="
-          find . -name "*.apk" ! -path "*android-sdk*" ! -path "*android/platform*"
-
-          APK_PATH=$(find . -name "*.apk" ! -path "*android-sdk*" ! -path "*android/platform*" | head -n 1)
-
-          if [ -z "$APK_PATH" ]; then
-            echo "âŒ No APK found!"
-            exit 1
-          fi
-
-          echo "âœ… Found APK: $APK_PATH"
-          mkdir -p bin
-          cp "$APK_PATH" bin/
-
-          echo "path=bin/$(basename $APK_PATH)" >> $GITHUB_OUTPUT
-          echo "name=$(basename $APK_PATH)" >> $GITHUB_OUTPUT
-
-      - name: Upload APK as artifact
+        run: buildozer android debug 2>&1 | tee build.log
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: KingApp-APK
-          path: ${{ steps.apk.outputs.path }}
-          if-no-files-found: error
+          path: bin/*.apk
+          if-no-files-found: warn
           retention-days: 30
-
-      - name: Update rolling latest release
-        if: github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          name: "Latest Build"
-          tag_name: latest
-          body: |
-            ## ðŸ“± KingApp â€” Latest Build
-            > Auto-updated on every push to `main`
-
-            ### How to install
-            1. Download `${{ steps.apk.outputs.name }}` below
-            2. Transfer to your Android phone
-            3. Enable **Install unknown apps** in Settings
-            4. Tap APK to install
-
-            **Built from:** ${{ github.sha }}
-          files: ${{ steps.apk.outputs.path }}
-          draft: false
-          prerelease: true
-          make_latest: false
-
-      - name: Create versioned release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          name: "KingApp ${{ github.ref_name }}"
-          tag_name: ${{ github.ref_name }}
-          body: |
-            ## ðŸ“± KingApp ${{ github.ref_name }}
-
-            ### How to install
-            1. Download `${{ steps.apk.outputs.name }}` below
-            2. Transfer to your Android phone
-            3. Enable **Install unknown apps** in Settings
-            4. Tap APK to install
-          files: ${{ steps.apk.outputs.path }}
-          draft: false
-          prerelease: false
-
-      - name: Upload build log (always)
+      - name: Upload log
         if: always()
         uses: actions/upload-artifact@v4
         with:
