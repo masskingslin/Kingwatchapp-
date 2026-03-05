@@ -8,7 +8,7 @@ source.include_exts = py,png,jpg,kv,atlas,json,txt
 version = 1.0
 
 # FIX: pyjnius pinned to 1.4.2 — latest version breaks with Python 3 (uses removed 'long' type)
-requirements = python3,kivy==2.3.0,psutil,plyer,pyjnius==1.4.2
+requirements = python3,kivy==2.3.0,plyer,pyjnius==1.4.2
 
 orientation = portrait
 android.permissions = INTERNET
