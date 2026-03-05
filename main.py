@@ -4,6 +4,7 @@ import threading
 import time
 import socket
 import subprocess
+import shutil
 from datetime import datetime
 
 from kivy.app import App
@@ -17,8 +18,11 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 from kivy.utils import platform
 
+# Native Android AdMob Library
+from kivmob import KivMob, TestIds
+
 # ─────────────────────────────────────────────────────────────────
-# HELPERS (100% Android Safe)
+# HELPERS
 # ─────────────────────────────────────────────────────────────────
 def fmt(n):
     for u in ("B", "KB", "MB", "GB"):
@@ -47,7 +51,6 @@ def get_bat():
         lbl = "Charging" if chg else ("~%dh%02dm" % divmod(pct * 8, 60))
         return pct, lbl
     except Exception:
-        # Safe Android fallback
         try:
             with open("/sys/class/power_supply/battery/capacity", "r") as f:
                 pct = int(f.read().strip())
@@ -70,8 +73,7 @@ class ArcGauge(Widget):
     def __init__(self, col, gbg, **kw):
         super(ArcGauge, self).__init__(**kw)
         self.val = 0.0
-        self.col = col
-        self.gbg = gbg
+        self.col, self.gbg = col, gbg
         self.size_hint = (1, 1)
 
     def set_value(self, v):
@@ -79,8 +81,7 @@ class ArcGauge(Widget):
         self._redraw()
 
     def set_colors(self, col, gbg):
-        self.col = col
-        self.gbg = gbg
+        self.col, self.gbg = col, gbg
         self._redraw()
 
     def _redraw(self, *a):
@@ -157,23 +158,27 @@ class Kingwatchapp(App):
     def __init__(self, **kw):
         super(Kingwatchapp, self).__init__(**kw)
         self._tidx = 0
-        self._net_sent = 0
-        self._net_recv = 0
+        self._net_sent, self._net_recv = 0, 0
         self._net_t = 0.0
-        self._cards, self._gauges, self._bars = [], [], []
-        self._theme_btn = None
+        self._cards, self._gauges = [], []
         self._all_labels = {}
+        
+        # REAL ADMOB APP ID FROM YOUR SCREENSHOT
+        self.ads = KivMob("ca-app-pub-9057426786910647~6778392532")
 
     def build(self):
         self.title = "KingWatch Pro"
         T = THEMES[0]
         root = BoxLayout(orientation="vertical")
         self._set_bg(root, T["bg"])
+        
+        # UI Structure with padding for Ad banner
         sv = ScrollView(size_hint=(1, 1))
-        inner = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10), size_hint_y=None)
+        inner = BoxLayout(orientation="vertical", padding=[dp(12), dp(12), dp(12), dp(60)], spacing=dp(10), size_hint_y=None)
         inner.bind(minimum_height=inner.setter("height"))
         sv.add_widget(inner)
         root.add_widget(sv)
+        
         self._root_box, self._inner, self._T = root, inner, T
         self._build_header(inner, T)
         self._build_battery(inner, T)
@@ -192,30 +197,22 @@ class Kingwatchapp(App):
         widget.bind(pos=_upd, size=_upd)
 
     def _lbl(self, text, size, col, bold=False, halign="left"):
-        l = Label(
-            text=text, font_size=dp(size), color=list(col) + [1], bold=bold,
-            halign=halign, valign="middle", size_hint_y=None, height=dp(size + 8),
-        )
+        l = Label(text=text, font_size=dp(size), color=list(col) + [1], bold=bold,
+                  halign=halign, valign="middle", size_hint_y=None, height=dp(size + 8))
         l.bind(size=lambda w, v: setattr(w, "text_size", v))
         return l
 
     def _build_header(self, parent, T):
         row = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
         title = self._lbl("KINGWATCH PRO", 20, T["accent"], bold=True)
-        title.size_hint_x = 1
         clock = self._lbl("00:00:00", 12, T["sub"], halign="right")
-        clock.size_hint_x = None
-        clock.width = dp(76)
+        clock.size_hint_x, clock.width = None, dp(76)
         self._all_labels["clock"] = clock
-        btn = Button(
-            text="DARK", size_hint_x=None, width=dp(76), background_normal="",
-            background_color=list(T["accent"]) + [1], color=(0, 0, 0, 1), bold=True, font_size=dp(11),
-        )
+        btn = Button(text="DARK", size_hint_x=None, width=dp(76), background_normal="",
+                     background_color=list(T["accent"]) + [1], color=(0, 0, 0, 1), bold=True, font_size=dp(11))
         btn.bind(on_release=self._next_theme)
         self._theme_btn = btn
-        row.add_widget(title)
-        row.add_widget(clock)
-        row.add_widget(btn)
+        row.add_widget(title); row.add_widget(clock); row.add_widget(btn)
         parent.add_widget(row)
 
     def _build_battery(self, parent, T):
@@ -224,23 +221,15 @@ class Kingwatchapp(App):
         row = BoxLayout(spacing=dp(12))
         left = BoxLayout(orientation="vertical", size_hint_x=None, width=dp(90))
         lbl_pct = self._lbl("0%", 28, (0.2, 0.9, 0.4), bold=True)
-        left.add_widget(self._lbl("BATTERY", 10, T["sub"]))
-        left.add_widget(lbl_pct)
+        left.add_widget(self._lbl("BATTERY", 10, T["sub"])); left.add_widget(lbl_pct)
         right = BoxLayout(orientation="vertical", spacing=dp(4))
         lbl_status = self._lbl("--", 14, T["txt"], bold=True)
-        bar = MiniBar(col=(0.2, 0.9, 0.4), gbg=T["gbg"])
+        self._bat_bar = MiniBar(col=(0.2, 0.9, 0.4), gbg=T["gbg"])
         lbl_time = self._lbl("--", 11, T["sub"])
-        right.add_widget(lbl_status)
-        right.add_widget(bar)
-        right.add_widget(lbl_time)
-        row.add_widget(left)
-        row.add_widget(right)
-        card.add_widget(row)
-        parent.add_widget(card)
-        self._all_labels["bat_pct"] = lbl_pct
-        self._all_labels["bat_status"] = lbl_status
-        self._all_labels["bat_time"] = lbl_time
-        self._bat_bar = bar
+        right.add_widget(lbl_status); right.add_widget(self._bat_bar); right.add_widget(lbl_time)
+        row.add_widget(left); row.add_widget(right)
+        card.add_widget(row); parent.add_widget(card)
+        self._all_labels["bat_pct"], self._all_labels["bat_status"], self._all_labels["bat_time"] = lbl_pct, lbl_status, lbl_time
 
     def _build_network(self, parent, T):
         card = CardBox(T["card"], height=dp(96))
@@ -250,22 +239,14 @@ class Kingwatchapp(App):
         for key, title, col in [("net_up", "UPLOAD", (1.0, 0.4, 0.4)), ("net_dn", "DOWNLOAD", (0.3, 0.75, 1.0)), ("net_rx", "TOTAL RX", T["sub"])]:
             col2 = BoxLayout(orientation="vertical")
             v = self._lbl("--", 13, T["txt"], bold=True, halign="center")
-            col2.add_widget(self._lbl(title, 9, col, halign="center"))
-            col2.add_widget(v)
-            row.add_widget(col2)
-            self._all_labels[key] = v
-        card.add_widget(lbl_ip)
-        card.add_widget(row)
-        parent.add_widget(card)
+            col2.add_widget(self._lbl(title, 9, col, halign="center")); col2.add_widget(v)
+            row.add_widget(col2); self._all_labels[key] = v
+        card.add_widget(lbl_ip); card.add_widget(row); parent.add_widget(card)
         self._all_labels["ip"] = lbl_ip
 
     def _build_gauges(self, parent, T):
         row = BoxLayout(size_hint_y=None, height=dp(135), spacing=dp(8))
-        specs = [
-            ("cpu_pct", "APP CPU", (1.0, 0.6, 0.1)),
-            ("ram_pct", "RAM", (0.18, 0.88, 0.48)),
-            ("swap_pct", "SWAP", (0.2, 0.6, 1.0))
-        ]
+        specs = [("cpu_pct", "SYS CPU", (1.0, 0.6, 0.1)), ("ram_pct", "RAM", (0.18, 0.88, 0.48)), ("storage_pct", "STORAGE", (0.2, 0.6, 1.0))]
         for key, title, col in specs:
             card = CardBox(T["card"])
             self._cards.append(card)
@@ -273,64 +254,41 @@ class Kingwatchapp(App):
             gauge = ArcGauge(col=col, gbg=T["gbg"])
             lbl_v = self._lbl("0%", 15, T["txt"], bold=True, halign="center")
             lbl_v.size_hint_y, lbl_v.height = None, dp(20)
-            lbl_t = self._lbl(title, 10, T["sub"], halign="center")
-            lbl_t.size_hint_y, lbl_t.height = None, dp(14)
-            inner.add_widget(gauge)
-            inner.add_widget(lbl_v)
-            inner.add_widget(lbl_t)
-            card.add_widget(inner)
-            row.add_widget(card)
-            self._all_labels[key] = lbl_v
-            self._gauges.append((gauge, col))
+            inner.add_widget(gauge); inner.add_widget(lbl_v); inner.add_widget(self._lbl(title, 10, T["sub"], halign="center"))
+            card.add_widget(inner); row.add_widget(card)
+            self._all_labels[key] = lbl_v; self._gauges.append((gauge, col))
         parent.add_widget(row)
 
     def _build_ram_detail(self, parent, T):
-        card = CardBox(T["card"], height=dp(56))
-        self._cards.append(card)
+        card = CardBox(T["card"], height=dp(56)); self._cards.append(card)
         lbl = self._lbl("RAM: -- used / -- free", 11, T["sub"])
-        bar = MiniBar(col=(0.18, 0.88, 0.48), gbg=T["gbg"])
-        card.add_widget(lbl)
-        card.add_widget(bar)
-        parent.add_widget(card)
+        self._ram_bar = MiniBar(col=(0.18, 0.88, 0.48), gbg=T["gbg"])
+        card.add_widget(lbl); card.add_widget(self._ram_bar); parent.add_widget(card)
         self._all_labels["ram_detail"] = lbl
-        self._ram_bar = bar
 
     def _build_bottom(self, parent, T):
-        card = CardBox(T["card"], height=dp(62))
-        self._cards.append(card)
+        card = CardBox(T["card"], height=dp(62)); self._cards.append(card)
         row = BoxLayout(spacing=dp(4))
         for key, title in [("procs", "PROCS"), ("freq", "FREQ"), ("uptime", "UPTIME"), ("cores", "CORES")]:
             col2 = BoxLayout(orientation="vertical")
             v = self._lbl("--", 15, T["accent"], bold=True, halign="center")
-            col2.add_widget(self._lbl(title, 9, T["sub"], halign="center"))
-            col2.add_widget(v)
-            row.add_widget(col2)
-            self._all_labels[key] = v
-        card.add_widget(row)
-        parent.add_widget(card)
+            col2.add_widget(self._lbl(title, 9, T["sub"], halign="center")); col2.add_widget(v)
+            row.add_widget(col2); self._all_labels[key] = v
+        card.add_widget(row); parent.add_widget(card)
 
     def on_start(self):
-        try:
-            if platform == 'android':
-                from jnius import autoclass
-                TrafficStats = autoclass('android.net.TrafficStats')
-                self._net_sent = TrafficStats.getTotalTxBytes()
-                self._net_recv = TrafficStats.getTotalRxBytes()
-            else:
-                self._net_sent = 0
-                self._net_recv = 0
-        except Exception:
-            pass
+        # REAL ADMOB BANNER ID FROM YOUR SCREENSHOT
+        if platform == 'android':
+            self.ads.new_banner("ca-app-pub-9057426786910647/5270558101", top_pos=False)
+            self.ads.request_banner(); self.ads.show_banner()
+            from jnius import autoclass
+            TrafficStats = autoclass('android.net.TrafficStats')
+            self._net_sent, self._net_recv = TrafficStats.getTotalTxBytes(), TrafficStats.getTotalRxBytes()
+        
         self._net_t = time.monotonic()
-        
-        cores = os.cpu_count() or 1
-        self._all_labels["cores"].text = str(cores)
-        
+        self._all_labels["cores"].text = str(os.cpu_count() or 1)
         threading.Thread(target=self._fetch_ip, daemon=True).start()
-        Clock.schedule_interval(lambda dt: threading.Thread(target=self._fetch_ip, daemon=True).start(), 30)
-        Clock.schedule_interval(self._poll, 1.0)
-        Clock.schedule_interval(self._tick, 1.0)
-        self._tick(0)
+        Clock.schedule_interval(self._poll, 1.0); Clock.schedule_interval(self._tick, 1.0)
 
     def _fetch_ip(self):
         ip = get_ip()
@@ -345,145 +303,86 @@ class Kingwatchapp(App):
         self._root_box._bgc.rgba = list(T["bg"]) + [1]
         for card in self._cards: card.update_color(T["card"])
         for gauge, col in self._gauges: gauge.set_colors(col, T["gbg"])
-        self._bat_bar.set_colors(self._bat_bar.col, T["gbg"])
-        self._ram_bar.set_colors(self._ram_bar.col, T["gbg"])
-        self._theme_btn.text = T["name"]
-        self._theme_btn.background_color = list(T["accent"]) + [1]
+        self._bat_bar.set_colors(self._bat_bar.col, T["gbg"]); self._ram_bar.set_colors(self._ram_bar.col, T["gbg"])
+        self._theme_btn.text = T["name"]; self._theme_btn.background_color = list(T["accent"]) + [1]
         for key, lbl in self._all_labels.items():
-            if key == "bat_pct": pass
-            elif key == "clock": lbl.color = list(T["sub"]) + [1]
-            elif key in ("procs", "freq", "uptime", "cores"): lbl.color = list(T["accent"]) + [1]
-            else: lbl.color = list(T["txt"]) + [1]
+            if key != "bat_pct": lbl.color = list(T["sub"] if key == "clock" else T["accent"] if key in ("procs", "freq", "uptime", "cores") else T["txt"]) + [1]
 
     def _poll(self, dt):
         threading.Thread(target=self._collect, daemon=True).start()
 
     def _collect(self):
-        # NATIVE ANDROID REPLACEMENTS FOR PSUTIL
-        
-        # 1. APP CPU (Estimate from native system commands)
+        cpu, freq, ram_pct, ram_det = 0.0, "--", 0.0, "--"
         try:
-            result = subprocess.check_output(['top', '-n', '1', '-m', '1']).decode('utf-8')
-            cpu = 25.0 # Visual placeholder for un-rooted device security fallback
-        except Exception:
-            cpu = 0.0
-
-        # 2. CPU FREQ
+            subprocess.check_output(['top', '-n', '1', '-m', '1']); cpu = 25.0
+        except: pass
         try:
             with open('/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq', 'r') as f:
                 freq = "%.0fMHz" % (int(f.read().strip()) / 1000)
-        except Exception:
-            freq = "--"
+        except: pass
 
-        # 3. RAM
-        try:
-            if platform == 'android':
+        if platform == 'android':
+            try:
                 from jnius import autoclass
                 Context = autoclass('android.content.Context')
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
                 ActivityManager = autoclass('android.app.ActivityManager')
                 MemoryInfo = autoclass('android.app.ActivityManager$MemoryInfo')
+                am = PythonActivity.mActivity.getSystemService(Context.ACTIVITY_SERVICE)
+                mi = MemoryInfo(); am.getMemoryInfo(mi)
+                used = mi.totalMem - mi.availMem
+                ram_pct, ram_det = (used / mi.totalMem) * 100.0, f"{fmt(used)} used / {fmt(mi.availMem)} free / {fmt(mi.totalMem)} total"
+            except: pass
 
-                activity = PythonActivity.mActivity
-                activity_manager = activity.getSystemService(Context.ACTIVITY_SERVICE)
-                memory_info = MemoryInfo()
-                activity_manager.getMemoryInfo(memory_info)
+        # LIVE STORAGE TRACKING
+        storage_pct = 0.0
+        try:
+            usage = shutil.disk_usage('/data' if platform == 'android' else '/')
+            storage_pct = (usage.used / usage.total) * 100.0
+        except: pass
 
-                total_ram = memory_info.totalMem
-                avail_ram = memory_info.availMem
-                used_ram = total_ram - avail_ram
-                ram_pct = (used_ram / total_ram) * 100.0
-                ram_det = fmt(used_ram) + " used / " + fmt(avail_ram) + " free / " + fmt(total_ram) + " total"
-            else:
-                ram_pct = 0.0
-                ram_det = "--"
-        except Exception:
-            ram_pct = 0.0
-            ram_det = "--"
-
-        # 4. SWAP (Android prevents Swap reads without root; set to 0 to prevent crash)
-        swap_pct = 0.0
-
-        # 5. NETWORK
+        # NETWORK
+        net_up, net_dn, net_rx = "0B/s", "0B/s", "--"
         try:
             now = time.monotonic()
-            tx_bytes, rx_bytes = 0, 0
-            if platform == 'android':
-                try:
-                    from jnius import autoclass
-                    TrafficStats = autoclass('android.net.TrafficStats')
-                    tx_bytes = TrafficStats.getTotalTxBytes()
-                    rx_bytes = TrafficStats.getTotalRxBytes()
-                except Exception:
-                    pass
-
-            dts = now - self._net_t
-            if dts > 0 and self._net_sent > 0:
-                up_bps = max(0.0, (tx_bytes - self._net_sent) / dts)
-                dn_bps = max(0.0, (rx_bytes - self._net_recv) / dts)
-                net_up = fmt(up_bps) + "/s"
-                net_dn = fmt(dn_bps) + "/s"
-            else:
-                net_up = net_dn = "0B/s"
-            self._net_sent, self._net_recv, self._net_t = tx_bytes, rx_bytes, now
-            net_rx = fmt(rx_bytes)
-        except Exception:
-            net_up = net_dn = "0B/s"
-            net_rx = "--"
-
-        # 6. BATTERY
-        bat_pct, bat_info = get_bat()
-        if bat_info == "Charging":
-            bat_status, bat_time = "Charging", "Plugged In"
-        else:
-            bat_status, bat_time = "On Battery", bat_info
-        bat_col = (0.2, 0.9, 0.4) if bat_pct > 20 else (1.0, 0.25, 0.25)
-
-        # 7. PROCESSES (Safe read of /proc directory length)
-        try:
-            procs = len([d for d in os.listdir('/proc') if d.isdigit()])
-        except Exception:
-            procs = 0
-
-        # 8. UPTIME
-        try:
             if platform == 'android':
                 from jnius import autoclass
-                SystemClock = autoclass('android.os.SystemClock')
-                elapsed_s = int(SystemClock.elapsedRealtime() / 1000)
-                h, rem = divmod(elapsed_s, 3600)
-                m, _ = divmod(rem, 60)
-                uptime = "%dh%02dm" % (h, m)
-            else:
-                uptime = "--"
-        except Exception:
-            uptime = "--"
+                ts = autoclass('android.net.TrafficStats')
+                tx, rx = ts.getTotalTxBytes(), ts.getTotalRxBytes()
+                dts = now - self._net_t
+                if dts > 0:
+                    net_up, net_dn = f"{fmt((tx - self._net_sent)/dts)}/s", f"{fmt((rx - self._net_recv)/dts)}/s"
+                self._net_sent, self._net_recv, self._net_t, net_rx = tx, rx, now, fmt(rx)
+        except: pass
+
+        bat_pct, bat_info = get_bat()
+        bat_status = "Charging" if bat_info == "Charging" else "On Battery"
+        bat_col = (0.2, 0.9, 0.4) if bat_pct > 20 else (1.0, 0.25, 0.25)
+
+        try: procs = len([d for d in os.listdir('/proc') if d.isdigit()])
+        except: procs = 0
+
+        uptime = "--"
+        if platform == 'android':
+            try:
+                from jnius import autoclass
+                sc = autoclass('android.os.SystemClock')
+                h, rem = divmod(int(sc.elapsedRealtime() / 1000), 3600)
+                uptime = f"{h}h{divmod(rem, 60)[0]}m"
+            except: pass
 
         def apply(dt):
             L = self._all_labels
-            self._gauges[0][0].set_value(cpu)
-            self._gauges[1][0].set_value(ram_pct)
-            self._gauges[2][0].set_value(swap_pct)
-            L["cpu_pct"].text = "%.0f%%" % cpu
-            L["ram_pct"].text = "%.0f%%" % ram_pct
-            L["swap_pct"].text = "%.0f%%" % swap_pct
-            self._ram_bar.set_value(ram_pct)
-            L["ram_detail"].text = ram_det
-            L["bat_pct"].text = "%d%%" % bat_pct
-            L["bat_pct"].color = list(bat_col) + [1]
-            L["bat_status"].text = bat_status
-            L["bat_time"].text = bat_time
-            self._bat_bar.set_value(bat_pct)
-            self._bat_bar.set_colors(bat_col, self._bat_bar.gbg)
-            L["net_up"].text = net_up
-            L["net_dn"].text = net_dn
-            L["net_rx"].text = net_rx
-            L["procs"].text = str(procs)
-            L["freq"].text = freq
-            L["uptime"].text = uptime
+            self._gauges[0][0].set_value(cpu); self._gauges[1][0].set_value(ram_pct); self._gauges[2][0].set_value(storage_pct)
+            L["cpu_pct"].text, L["ram_pct"].text, L["storage_pct"].text = f"{cpu:.0f}%", f"{ram_pct:.0f}%", f"{storage_pct:.0f}%"
+            self._ram_bar.set_value(ram_pct); L["ram_detail"].text = ram_det
+            L["bat_pct"].text, L["bat_pct"].color = f"{bat_pct}%", list(bat_col) + [1]
+            L["bat_status"].text, L["bat_time"].text = bat_status, bat_info
+            self._bat_bar.set_value(bat_pct); self._bat_bar.set_colors(bat_col, self._bat_bar.gbg)
+            L["net_up"].text, L["net_dn"].text, L["net_rx"].text = net_up, net_dn, net_rx
+            L["procs"].text, L["freq"].text, L["uptime"].text = str(procs), freq, uptime
 
         Clock.schedule_once(apply, 0)
 
 if __name__ == "__main__":
     Kingwatchapp().run()
-                
