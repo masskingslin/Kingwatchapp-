@@ -50,7 +50,7 @@ jobs:
             libltdl-dev \
             python3-dev
 
-      # FIX: pin Cython to 0.29.37 — Cython 3.x breaks pyjnius compile
+      # FIX: pin Cython to 0.29.37 â€” Cython 3.x breaks pyjnius compile
       - name: Install Buildozer and Cython
         run: |
           pip install --upgrade pip
@@ -76,7 +76,7 @@ jobs:
         run: |
           set -o pipefail
           buildozer android debug 2>&1 | tee build.log
-          echo "✅ Buildozer finished"
+          echo "âœ… Buildozer finished"
 
       - name: Find and collect APK
         id: apk
@@ -87,11 +87,11 @@ jobs:
           APK_PATH=$(find . -name "*.apk" ! -path "*android-sdk*" ! -path "*android/platform*" | head -n 1)
 
           if [ -z "$APK_PATH" ]; then
-            echo "❌ No APK found!"
+            echo "âŒ No APK found!"
             exit 1
           fi
 
-          echo "✅ Found APK: $APK_PATH"
+          echo "âœ… Found APK: $APK_PATH"
           mkdir -p bin
           cp "$APK_PATH" bin/
 
@@ -113,7 +113,7 @@ jobs:
           name: "Latest Build"
           tag_name: latest
           body: |
-            ## 📱 KingApp — Latest Build
+            ## ðŸ“± KingApp â€” Latest Build
             > Auto-updated on every push to `main`
 
             ### How to install
@@ -135,7 +135,7 @@ jobs:
           name: "KingApp ${{ github.ref_name }}"
           tag_name: ${{ github.ref_name }}
           body: |
-            ## 📱 KingApp ${{ github.ref_name }}
+            ## ðŸ“± KingApp ${{ github.ref_name }}
 
             ### How to install
             1. Download `${{ steps.apk.outputs.name }}` below
